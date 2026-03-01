@@ -20,7 +20,6 @@ html, body, [class*="css"] {
 }
 .stApp { background: #020c14; }
 
-/* Neon grid background */
 .grid-bg {
     position: fixed;
     inset: 0;
@@ -32,7 +31,6 @@ html, body, [class*="css"] {
     z-index: 0;
 }
 
-/* Glowing orb */
 .orb {
     position: fixed;
     top: -250px; left: 50%;
@@ -52,7 +50,6 @@ html, body, [class*="css"] {
     50%      { transform: translateX(-50%) scale(1.15); opacity:1; }
 }
 
-/* Header */
 .header-wrap { text-align: center; padding: 2.5rem 0 1.2rem; position: relative; z-index:1; }
 .header-title {
     font-family: 'Courier New', Courier, monospace;
@@ -64,7 +61,6 @@ html, body, [class*="css"] {
     -webkit-text-fill-color: transparent;
     margin: 0;
     line-height: 1.1;
-    text-shadow: none;
     filter: drop-shadow(0 0 20px rgba(0,220,255,0.5));
 }
 .header-sub {
@@ -75,7 +71,6 @@ html, body, [class*="css"] {
     margin-top: 0.5rem;
 }
 
-/* Stats chips */
 .stats-row {
     display: flex; gap: 0.8rem; flex-wrap: wrap;
     margin-top: 1.2rem; justify-content: center;
@@ -91,7 +86,31 @@ html, body, [class*="css"] {
 }
 .stat-chip span { color: #00eaff; font-weight: 600; }
 
-/* Textarea */
+/* Model toggle */
+.model-toggle-wrap {
+    display: flex; gap: 0; justify-content: center;
+    margin: 1.2rem auto 0;
+    border: 1px solid rgba(0,220,255,0.3);
+    border-radius: 6px;
+    overflow: hidden;
+    width: fit-content;
+}
+.model-badge {
+    padding: 0.4rem 1.4rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+.model-badge-active {
+    background: rgba(0,220,255,0.15);
+    color: #00eaff;
+    border-right: 1px solid rgba(0,220,255,0.3);
+}
+.model-badge-inactive {
+    background: transparent;
+    color: rgba(0,220,255,0.3);
+}
+
 textarea {
     background: rgba(0,20,40,0.8) !important;
     border: 1px solid rgba(0,220,255,0.3) !important;
@@ -108,10 +127,8 @@ textarea:focus {
     box-shadow: 0 0 0 2px rgba(0,220,255,0.2), 0 0 20px rgba(0,220,255,0.1) !important;
 }
 
-/* Slider */
 .stSlider > div > div { color: #00eaff !important; }
 
-/* Button */
 .stButton > button {
     width: 100%;
     background: transparent !important;
@@ -135,7 +152,6 @@ textarea:focus {
 }
 .stButton > button:active { transform: translateY(0) !important; }
 
-/* Result box */
 .result-box {
     margin-top: 1.6rem;
     padding: 1.6rem 2rem;
@@ -184,12 +200,8 @@ textarea:focus {
     to   { opacity:1; transform: scale(1); }
 }
 
-/* Probability bar */
 .prob-bar-wrap { margin-top: 1rem; text-align: left; }
-.prob-label {
-    font-size: 0.72rem; color: rgba(0,220,255,0.5);
-    margin-bottom: 0.3rem; letter-spacing:0.1em;
-}
+.prob-label { font-size: 0.72rem; color: rgba(0,220,255,0.5); margin-bottom: 0.3rem; letter-spacing:0.1em; }
 .prob-bar-bg {
     background: rgba(0,220,255,0.06);
     border-radius: 2px; height: 6px; overflow: hidden;
@@ -200,7 +212,6 @@ textarea:focus {
     box-shadow: 0 0 8px rgba(0,220,255,0.5);
 }
 
-/* Full output */
 .full-text-box {
     margin-top: 1.4rem;
     padding: 1rem 1.4rem;
@@ -214,7 +225,6 @@ textarea:focus {
     box-shadow: inset 0 0 20px rgba(0,220,255,0.03);
 }
 
-/* Footer */
 .footer {
     text-align: center; font-size: 0.65rem;
     color: rgba(0,220,255,0.2); margin-top: 2.5rem;
@@ -228,8 +238,15 @@ textarea:focus {
 
 
 @st.cache_resource(show_spinner=False)
-def load_artifacts():
+def load_lstm():
     model     = load_model("lstm_model.h5")
+    tokenizer = pickle.load(open("tokenizer.pkl", "rb"))
+    max_len   = pickle.load(open("max_len.pkl",   "rb"))
+    return model, tokenizer, max_len
+
+@st.cache_resource(show_spinner=False)
+def load_gru():
+    model     = load_model("gru_model.h5")
     tokenizer = pickle.load(open("tokenizer.pkl", "rb"))
     max_len   = pickle.load(open("max_len.pkl",   "rb"))
     return model, tokenizer, max_len
@@ -258,27 +275,37 @@ def predict_next_words(model, tokenizer, max_len, seed_text, n_words):
 st.markdown("""
 <div class="header-wrap">
   <p class="header-title">NeuralScribe</p>
-  <p class="header-sub">LSTM · Next Word Prediction Engine</p>
+  <p class="header-sub">Next Word Prediction Engine</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Load model
-with st.spinner("Initializing neural network..."):
+# Model selector
+model_choice = st.radio(
+    "Select Model",
+    ["LSTM", "GRU"],
+    horizontal=True,
+    label_visibility="collapsed",
+)
+
+# Load selected model
+with st.spinner(f"Loading {model_choice} model..."):
     try:
-        model, tokenizer, max_len = load_artifacts()
+        if model_choice == "LSTM":
+            model, tokenizer, max_len = load_lstm()
+        else:
+            model, tokenizer, max_len = load_gru()
         vocab_size = len(tokenizer.word_index) + 1
         loaded_ok = True
     except Exception as e:
         st.error(f"Could not load model files: {e}")
-        st.info("Make sure lstm_model.h5, tokenizer.pkl, and max_len.pkl are in the same folder as app.py.")
         loaded_ok = False
 
 if loaded_ok:
     st.markdown(f"""
     <div class="stats-row">
+      <div class="stat-chip">Model <span>{model_choice}</span></div>
       <div class="stat-chip">Vocab size <span>{vocab_size:,}</span></div>
       <div class="stat-chip">Max sequence len <span>{max_len}</span></div>
-      <div class="stat-chip">Model <span>LSTM</span></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -304,7 +331,7 @@ if loaded_ok:
         if not seed_text.strip():
             st.warning("Please enter some seed text first.")
         else:
-            with st.spinner("Processing..."):
+            with st.spinner(f"Running {model_choice}..."):
                 time.sleep(0.3)
                 predictions = predict_next_words(model, tokenizer, max_len, seed_text.strip(), n_words)
 
@@ -315,7 +342,7 @@ if loaded_ok:
             label = "word" if n_words == 1 else "words"
             st.markdown(
                 f'<div class="result-box">'
-                f'<div class="result-label">// Predicted {label}</div>'
+                f'<div class="result-label">// {model_choice} · Predicted {label}</div>'
                 f'<div class="result-tokens">{words_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True
@@ -325,7 +352,7 @@ if loaded_ok:
                 pct = round(p * 100, 1)
                 st.markdown(
                     f'<div class="prob-bar-wrap">'
-                    f'<div class="prob-label">"{w}" — confidence {pct}%</div>'
+                    f'<div class="prob-label">"{w}" - confidence {pct}%</div>'
                     f'<div class="prob-bar-bg">'
                     f'<div class="prob-bar-fill" style="width:{pct}%"></div>'
                     f'</div></div>',
